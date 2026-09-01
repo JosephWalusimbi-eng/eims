@@ -1,0 +1,12 @@
+# --- runtime -----------------------------------------------------------
+Django>=5.2
+python-dotenv>=1.0
+psycopg2-binary>=2.9
+reportlab>=4.0
+cryptography>=42.0        # column encryption (apps/core/crypto.py) -- required
+python-docx>=1.1.0        # user-guide generation only
+
+# --- reproducing the paper's analyses (analysis/README.md) -------------
+numpy>=1.26
+scipy>=1.11               # Spearman correlation, sensitivity_analysis.py
+scikit-learn>=1.4         # AUC, calibration, logistic baseline

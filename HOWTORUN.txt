@@ -1,0 +1,40 @@
+How to Run EIMS (Electronic Immunization Management Information System)
+=======================================================================
+
+1. Prerequisites
+   - Python 3.10+
+   - PostgreSQL database
+
+2. Install dependencies
+   pip install -r requirements.txt
+
+3. Configure database
+   Create a .env file in the project root with:
+   DB_NAME=eims
+   DB_USER=postgres
+   DB_PASSWORD=StrongPassword123
+   DB_HOST=localhost
+   DB_PORT=5432
+
+   Create the database in PostgreSQL:
+   createdb eims
+
+4. Run migrations
+   python manage.py migrate
+
+5. Create superuser (optional, for admin access)
+   python manage.py createsuperuser
+
+6. Start the development server
+   python manage.py runserver  (currently only superuser was created, you can add others)
+
+7. Access the application
+   - Dashboard: http://127.0.0.1:8000/
+   - Admin: http://127.0.0.1:8000/admin/
+
+8. Run immunization analysis (optional)
+   python manage.py analyze_immunization
+
+9. Load sample data for dashboard (optional)
+   python manage.py load_sample_data
+   python manage.py load_sample_data --clear   # Replace existing data

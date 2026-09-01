@@ -1,0 +1,18 @@
+.env
+*.pyc
+__pycache__/
+media/
+passwordlogins.txt
+*.sqlite3
+.venv/
+venv/
+.pytest_cache/
+analysis_out/
+benchmark_results.json
+
+# Manuscript drafts, slide decks and exports. ~85 MB of Word/PowerPoint
+# versions that are not part of the reproducibility artifact -- the code,
+# analysis/ and docs/ are. Kept on disk, out of the repository.
+research paper/
+*.docx
+*.pptx

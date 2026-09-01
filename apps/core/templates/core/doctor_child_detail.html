@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EIMS Child Details</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container py-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <h1 class="h3 mb-0">{{ child.full_name }}</h1>
+                <div class="text-muted small">UUID: {{ child.unique_id }}</div>
+            </div>
+            <div class="d-flex gap-2">
+                <form method="post" action="{% url 'doctor_generate_card' child.unique_id %}">
+                    {% csrf_token %}
+                    <button class="btn btn-outline-primary" type="submit">Generate Immunization Card</button>
+                </form>
+                <a class="btn btn-outline-secondary" href="{% url 'doctor_view_card' child.unique_id %}">
+                    View Card
+                </a>
+                <form method="post" action="{% url 'doctor_send_calendar' child.unique_id %}">
+                    {% csrf_token %}
+                    <button class="btn btn-primary" type="submit">Send Calendar + Card</button>
+                </form>
+                <a class="btn btn-outline-secondary" href="{% url 'doctor_portal' %}">Back</a>
+                <form method="post" action="{% url 'logout' %}" class="d-inline">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline-danger">Logout</button>
+                </form>
+            </div>
+        </div>
+
+        {% if messages %}
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endfor %}
+        {% endif %}
+
+        <div class="row g-3 mb-4">
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h2 class="h5">Child</h2>
+                        <div><b>Name:</b> {{ child.full_name }}</div>
+                        <div><b>DOB:</b> {{ child.date_of_birth }}</div>
+                        <div><b>Gender:</b> {{ child.gender }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h2 class="h5">Caregiver</h2>
+                        <div><b>Name:</b> {{ child.caregiver.full_name }}</div>
+                        <div><b>Phone:</b> {{ child.caregiver.phone_number }}</div>
+                        <div><b>Email:</b> {{ child.caregiver.email|default:"-" }}</div>
+                        <div><b>Alt email:</b> {{ child.caregiver.alternate_email|default:"-" }}</div>
+                        <div><b>District:</b> {{ child.caregiver.district|default:"-" }}</div>
+                        <div><b>Village:</b> {{ child.caregiver.village }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-3">
+            <div class="col-lg-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h2 class="h5">Pending vaccines ({{ pending|length }})</h2>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-striped align-middle">
+                                <thead>
+                                    <tr>
+                                        <th>Vaccine</th>
+                                        <th>Due date</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for s in pending %}
+                                    <tr>
+                                        <td>{{ s.vaccine_name }}</td>
+                                        <td>{{ s.due_date }}</td>
+                                        <td>
+                                            <form method="post" action="{% url 'doctor_administer_vaccine' s.id %}">
+                                                {% csrf_token %}
+                                                <button class="btn btn-sm btn-success" type="submit">Administered</button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                    {% empty %}
+                                    <tr><td colspan="3" class="text-muted">No pending vaccines.</td></tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h2 class="h5">Completed vaccines ({{ completed|length }})</h2>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Vaccine</th>
+                                        <th>Due date</th>
+                                        <th>Administered date</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for s in completed %}
+                                    <tr>
+                                        <td>{{ s.vaccine_name }}</td>
+                                        <td>{{ s.due_date }}</td>
+                                        <td>{{ s.administered_date|default:"-" }}</td>
+                                        <td>
+                                            <form method="post" action="{% url 'doctor_unadminister_vaccine' s.id %}">
+                                                {% csrf_token %}
+                                                <button class="btn btn-sm btn-outline-danger" type="submit">Cancel Administered</button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                    {% empty %}
+                                    <tr><td colspan="4" class="text-muted">No completed vaccines.</td></tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+
