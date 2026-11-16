@@ -12,7 +12,7 @@ Chrome. The cohort comes from `manage.py seed_prototype`, which is seeded, so
 the figure is deterministic.
 
 Usage:
-    python analysis/render_dashboard_figure.py --out EIMS_IEEE_NCC/dashboard.png
+    python analysis/render_dashboard_figure.py --height 690 --out EIMS_IEEE_NCC/dashboard.png
 """
 from __future__ import annotations
 
@@ -100,6 +100,24 @@ def render_html() -> str:
     # The figure is a still: drop the action button, which would otherwise
     # render as a live form control in a printed page.
     html = re.sub(r"<form method=\"post\".*?</form>", "", html, flags=re.S)
+
+    # The live page opens with a banner (stock photograph, lay explanation of
+    # immunization) and three explainer cards aimed at first-time visitors.
+    # They carry no data, the photograph is third-party, and at column width
+    # they would push the tiles and district table out of frame, so the figure
+    # replaces them with a plain title. Everything from the tiles down is the
+    # template as served.
+    html, n_hero = re.subn(
+        r"<header class=\"hero.*?</header>",
+        '<div class="container pt-4"><h1 class="h3 fw-bold mb-3">EIMS Monitoring Dashboard</h1></div>',
+        html, count=1, flags=re.S,
+    )
+    html, n_steps = re.subn(
+        r"<div class=\"row g-3 mb-5\">.*?(?=<h2 class=\"section-title)",
+        "", html, count=1, flags=re.S,
+    )
+    if not (n_hero and n_steps):
+        raise SystemExit("dashboard template changed; update the figure trimming")
     return html
 
 
@@ -122,7 +140,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="dashboard.png")
     ap.add_argument("--width", type=int, default=1500)
-    ap.add_argument("--height", type=int, default=840)
+    ap.add_argument("--height", type=int, default=690)
     args = ap.parse_args()
 
     chrome = find_chrome()

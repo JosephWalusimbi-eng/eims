@@ -11,6 +11,10 @@ from it in three ways that mattered:
   * it showed no security layer, though encryption at rest and the append-only
     audit log are now central claims.
 
+Later additions drawn here as well: the self-updating card (re-issued with the
+dose ticked whenever a dose changes, by any route) and the opt-in voice
+escalation for high-risk children, both of which go through the same queue.
+
 A figure that contradicts the paper's own results is worse than no figure, so
 this script generates it from a declarative description that lives next to the
 code it depicts. Rendered with headless Chrome so it is reproducible and needs
@@ -135,7 +139,7 @@ HTML = r"""
     <div class="chip">Schedule Generation<small>EPI offsets</small></div>
     <div class="chip">Overdue Detection</div>
     <div class="chip">Risk &amp; Dropout Scoring<small>ranking, not probability</small></div>
-    <div class="chip">PDF Card</div>
+    <div class="chip">PDF Card<small>re-issued on each dose</small></div>
     <div class="chip">Calendar (.ics)<small>minimised payload</small></div>
   </div>
 </div>
@@ -173,6 +177,8 @@ HTML = r"""
     <div class="chip">Urgency<small>SMS, T&minus;3 d</small></div>
     <div class="chip">Overdue<small>SMS on detection</small></div>
     <div class="chip">Persistence<small>.ics at registration</small></div>
+    <div class="chip">Card Update<small>email on dose change</small></div>
+    <div class="chip">Voice Escalation<small>high risk, opt&#8209;in</small></div>
     <div class="chip">Retry &amp; Dedupe<small>failure stays queued</small></div>
   </div>
 </div>
@@ -209,6 +215,7 @@ HTML = r"""
   <div class="row">
     <div class="chip">SMS Gateway</div>
     <div class="chip">Email SMTP</div>
+    <div class="chip">Voice / TTS</div>
     <div class="chip">Calendar Platforms</div>
   </div>
 </div>
@@ -219,7 +226,8 @@ HTML = r"""
   <h4>Caregiver</h4>
   <div class="row">
     <div class="chip">SMS Reminder<small>given name, date, facility</small></div>
-    <div class="chip">Email + PDF Card<small>full schedule</small></div>
+    <div class="chip">Email + PDF Card<small>full schedule, doses ticked</small></div>
+    <div class="chip">Voice Call<small>scripted, given name, facility</small></div>
     <div class="chip">Calendar Events<small>passive persistence</small></div>
   </div>
 </div>

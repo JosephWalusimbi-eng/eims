@@ -22,7 +22,7 @@ Chrome or Edge, which the scripts locate automatically.
 
 | Paper artifact | Command | Runtime |
 |---|---|---|
-| **Table II** — functional validation, 85 tests | `python manage.py test apps` | ~1 min |
+| **Table II** — functional validation, 89 tests | `python manage.py test apps` | ~1 min |
 | **Table III** — weight sensitivity | `python analysis/sensitivity_analysis.py` | ~8 min |
 | **Table IV** — predictive validity, plus the dropout-rate sweep | `python analysis/predictive_validity.py` | ~2 min |
 | **Table V** — end-to-end performance | `python analysis/benchmark.py --full` | ~25 min |
