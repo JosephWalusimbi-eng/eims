@@ -43,6 +43,8 @@ python manage.py migrate
 ```bash
 python manage.py runserver
 ```
+if it refuses, maybe if another port is using, try another port python manage.py runserver 8765
+Then open http://127.0.0.1:8765/.
 
 ### URLs
 - **Dashboard**: `http://127.0.0.1:8000/`

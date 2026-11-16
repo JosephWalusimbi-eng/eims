@@ -181,6 +181,7 @@ LOGOUT_REDIRECT_URL = "/login/"
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+STATICFILES_DIRS = [BASE_DIR / "static"]
 
 # Media (generated PDFs, uploads)
 MEDIA_URL = "/media/"
@@ -199,6 +200,13 @@ if os.getenv("EMAIL_HOST"):
     EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "30"))
 else:
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+
+# Explicit override, used for demos and CI so that no real mail can leave:
+# EMAIL_BACKEND=django.core.mail.backends.filebased.EmailBackend plus EMAIL_FILE_PATH.
+if os.getenv("EMAIL_BACKEND"):
+    EMAIL_BACKEND = os.getenv("EMAIL_BACKEND")
+    if os.getenv("EMAIL_FILE_PATH"):
+        EMAIL_FILE_PATH = os.getenv("EMAIL_FILE_PATH")
 
 # SMS via Twilio (optional). If any value is missing, reminders still log SMS but do not call an API.
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
@@ -228,3 +236,9 @@ LOGGING = {
         "eims.sync": {"handlers": ["console"], "level": "INFO", "propagate": False},
     },
 }
+
+
+# Automated voice assistant. Calls cost money and reach a person, so the
+# escalation pass that places them for HIGH-risk children is opt-in. Manual
+# calls from the doctor portal are always available.
+EIMS_VOICE_AUTOCALL = _flag("EIMS_VOICE_AUTOCALL", "false")

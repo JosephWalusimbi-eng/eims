@@ -17,7 +17,7 @@ from datetime import timedelta
 
 from django.utils import timezone
 
-from apps.immunization.models import NotificationLog, VaccineSchedule
+from apps.immunization.models import Child, NotificationLog, VaccineSchedule
 from apps.immunization.services.detection import (
     get_children_with_upcoming_vaccines,
     get_overdue_children,
@@ -105,3 +105,25 @@ def send_five_day_email_reminders() -> int:
             )
             queued += 1
     return queued
+
+
+def send_voice_escalations() -> int:
+    """Queue an automated call for each child whose latest tier is HIGH.
+
+    One call per child per day. Escalation, not first contact: these are the
+    children with two or more missed doses, for whom the SMS has already been
+    queued by the overdue tier.
+    """
+    from apps.immunization.services import atrisk
+    from apps.immunization.services.voice_service import queue_voice_call
+
+    today = timezone.now().date()
+    count = 0
+    for child in Child.objects.filter(pk__in=atrisk.high_risk_child_ids()).select_related("caregiver"):
+        log = queue_voice_call(
+            child, overdue=True,
+            dedupe_key=f"voice:{child.pk}:{today.isoformat()}",
+        )
+        if log is not None:
+            count += 1
+    return count

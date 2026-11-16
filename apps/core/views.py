@@ -4,20 +4,30 @@ import base64
 from django.db.models import Count, OuterRef, Q, Subquery
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
+from django.core.paginator import Paginator
 from django.db import transaction
+from django.http import Http404
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 from django.utils import timezone
 from django.urls import reverse
 
-from apps.immunization.models import Caregiver, Child, RiskScore, VaccineSchedule
+from apps.immunization.models import Caregiver, Child, NotificationLog, RiskScore, VaccineSchedule
 from apps.immunization.services.analysis_engine import run_analysis
 from apps.immunization.services.detection import get_overdue_vaccines
 from apps.immunization.services.vaccine_service import administer_vaccine
 from apps.core import audit_helpers as audit
 from apps.core.auth import user_is_doctor, user_is_staff_member
 from apps.core.forms import CaregiverChildRegistrationForm
-from apps.immunization.services.card_service import build_child_card_assets, upsert_immunization_card
+from apps.immunization.services import atrisk
+from apps.immunization.services import notification_service as notify
+from apps.immunization.services.card_service import (
+    build_child_card_assets,
+    queue_card_update,
+    upsert_immunization_card,
+)
+from apps.immunization.services.voice_service import queue_voice_call
 from apps.immunization.services.email_service import send_immunization_card_email
 
 
@@ -43,9 +53,10 @@ def dashboard(request):
 
     overdue_vaccines = get_overdue_vaccines().count()
 
-    high_risk_children = Child.objects.filter(
-        risk_scores__level=RiskScore.Level.HIGH,
-    ).distinct().count()
+    # "At risk" has exactly one definition (services/atrisk.py), shared with the
+    # lists these tiles link to, so a tile and its list always agree.
+    high_risk_children = Child.objects.filter(pk__in=atrisk.high_risk_child_ids()).count()
+    overdue_children = atrisk.children_for("overdue").count()
 
     # Priority follow-up list.
     #
@@ -54,21 +65,8 @@ def dashboard(request):
     # as a calibrated probability, which makes averaging it across a facility
     # meaningless -- reweighting shifts the whole distribution while barely
     # disturbing the rank order. What the score does support is a ranked
-    # follow-up list, so that is what the dashboard now reports.
-    latest_risk_scores = RiskScore.objects.filter(
-        id=Subquery(
-            RiskScore.objects.filter(child=OuterRef("child"))
-            .order_by("-calculated_at")
-            .values("id")[:1]
-        )
-    )
-    scored = list(
-        latest_risk_scores.order_by("-dropout_probability")
-        .values_list("child_id", "dropout_probability")
-    )
-    follow_up_budget = max(1, int(round(0.10 * len(scored)))) if scored else 0
-    priority_ids = {cid for cid, _ in scored[:follow_up_budget]}
-    priority_threshold = scored[follow_up_budget - 1][1] if follow_up_budget else 0.0
+    # follow-up list, so that is what the dashboard reports.
+    priority_ids, priority_threshold = atrisk.priority_ids()
 
     # District-level statistics.
     #
@@ -101,7 +99,7 @@ def dashboard(request):
             ),
             high_risk_count=Count(
                 "children",
-                filter=Q(children__risk_scores__level=RiskScore.Level.HIGH),
+                filter=Q(children__id__in=atrisk.high_risk_child_ids()),
                 distinct=True,
             ),
             priority_count=Count(
@@ -125,6 +123,8 @@ def dashboard(request):
         "total_children": total_children,
         "vaccines_due_this_week": vaccines_due_this_week,
         "overdue_vaccines": overdue_vaccines,
+        "overdue_children": overdue_children,
+        "can_name_children": user_is_doctor(request.user),
         "high_risk_children": high_risk_children,
         "priority_follow_up": len(priority_ids),
         "priority_threshold": priority_threshold,
@@ -322,3 +322,98 @@ def doctor_unadminister_vaccine(request, schedule_id: int):
         f"Administration cancelled: {schedule.child.full_name} - {schedule.vaccine_name}",
     )
     return redirect("doctor_child_detail", child_uuid=schedule.child.unique_id)
+
+
+PAGE_SIZE = 25
+
+
+@login_required
+@user_passes_test(user_is_staff_member)
+def at_risk_list(request):
+    """Drill-down behind a dashboard tile: *which* children, not just how many.
+
+    Doctors see names and caregiver contact and can open the record or place a
+    call. Monitoring officers see the same ranked rows but pseudonymised -- a
+    short reference, district and village only -- because the Monitor role is
+    scoped to aggregate oversight (paper Sec. VI) and must not gain a roster of
+    named children through a link.
+    """
+    kind = request.GET.get("filter", "priority")
+    if kind not in atrisk.FILTERS:
+        raise Http404
+    district = (request.GET.get("district") or "").strip() or None
+    named = user_is_doctor(request.user)
+
+    qs = atrisk.children_for(kind, district)
+    page = Paginator(qs, PAGE_SIZE).get_page(request.GET.get("page"))
+    audit.log(
+        request, "READ", "AtRiskList",
+        detail=f"filter={kind} district={district or '*'} page={page.number} named={named}",
+    )
+    return render(
+        request,
+        "core/at_risk_list.html",
+        {
+            "kind": kind,
+            "title": atrisk.FILTERS[kind],
+            "district": district,
+            "page": page,
+            "named": named,
+            "filters": atrisk.FILTERS,
+        },
+    )
+
+
+@login_required
+@user_passes_test(user_is_doctor)
+@require_POST
+def doctor_update_card_and_send(request, child_uuid):
+    """Regenerate the card with its current ticks and send it now.
+
+    Queued first, then that one row is dispatched: the doctor sees the real
+    outcome, and if the facility is offline the update stays in the queue and
+    goes out on reconnection instead of being lost.
+    """
+    child = get_object_or_404(Child.objects.select_related("caregiver"), unique_id=child_uuid)
+    if not (child.caregiver.email or child.caregiver.alternate_email):
+        messages.warning(request, "Card refreshed, but there is no caregiver email on record; nothing sent.")
+        upsert_immunization_card(child, build_child_card_assets(child)[0])
+        return redirect("doctor_child_detail", child_uuid=child.unique_id)
+
+    upsert_immunization_card(child, build_child_card_assets(child)[0])
+    log = queue_card_update(child, reason="manual update by clinician")
+    audit.log(request, "UPDATE", "Child", child.unique_id, detail="card updated and sent")
+    ok, err = notify.dispatch_log(log)
+    if ok:
+        messages.success(request, "Card updated with current ticks and sent to the caregiver.")
+    else:
+        messages.warning(
+            request,
+            "Card updated. Delivery failed (%s); it is queued and will be retried." % (err or "unknown error"),
+        )
+    return redirect("doctor_child_detail", child_uuid=child.unique_id)
+
+
+@login_required
+@user_passes_test(user_is_doctor)
+@require_POST
+def doctor_call_caregiver(request, child_uuid):
+    """Place an automated assistant call to the caregiver (via the queue)."""
+    child = get_object_or_404(Child.objects.select_related("caregiver"), unique_id=child_uuid)
+    overdue = child.vaccines.filter(
+        administered=False, due_date__lt=timezone.now().date()
+    ).exists()
+    log = queue_voice_call(
+        child, overdue=overdue,
+        dedupe_key=f"voice-manual:{child.pk}:{timezone.now().isoformat()}",
+    )
+    audit.log(request, "EXPORT", "Child", child.unique_id, detail="automated voice call requested")
+    ok, err = notify.dispatch_log(log)
+    if ok:
+        messages.success(request, "Automated call placed to the caregiver.")
+    else:
+        messages.warning(request, "Call could not be placed (%s); it is queued for retry." % (err or "unknown error"))
+    nxt = request.POST.get("next", "")
+    if nxt and url_has_allowed_host_and_scheme(nxt, allowed_hosts={request.get_host()}):
+        return redirect(nxt)
+    return redirect("doctor_child_detail", child_uuid=child.unique_id)

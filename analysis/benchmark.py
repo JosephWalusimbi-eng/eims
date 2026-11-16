@@ -225,7 +225,7 @@ def bench_dashboard():
             due_date__gte=today, due_date__lte=today + timedelta(days=7), administered=False
         ).count()
         get_overdue_vaccines().count()
-        Child.objects.filter(risk_scores__level=RiskScore.Level.HIGH).distinct().count()
+        Child.objects.filter(pk__in=__import__("apps.immunization.services.atrisk", fromlist=["x"]).high_risk_child_ids()).count()
         districts = list(
             Caregiver.objects.filter(children__isnull=False).order_by()
             .values_list("district", flat=True).distinct()

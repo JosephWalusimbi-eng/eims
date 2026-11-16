@@ -112,7 +112,7 @@ def summarise():
     print("  children              %d" % Child.objects.count())
     print("  overdue dose-instances %d" % overdue.count())
     print("  high-risk children    %d"
-          % Child.objects.filter(risk_scores__level=RiskScore.Level.HIGH).distinct().count())
+          % Child.objects.filter(pk__in=__import__("apps.immunization.services.atrisk", fromlist=["x"]).high_risk_child_ids()).count())
     for level in ("LOW", "MEDIUM", "HIGH"):
         n = Child.objects.filter(risk_scores__level=level).distinct().count()
         print("    tier %-7s %d" % (level, n))

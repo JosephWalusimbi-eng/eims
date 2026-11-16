@@ -1,9 +1,12 @@
 """Full analysis pass: rescore every child, then queue and dispatch reminders."""
+from django.conf import settings
+
 from apps.immunization.models import Child
 from apps.immunization.services import notification_service as notify
 from apps.immunization.services.reminder_engine import (
     send_five_day_email_reminders,
     send_overdue_reminders,
+    send_voice_escalations,
     send_upcoming_due_reminders,
 )
 from apps.immunization.services.risk_engine import calculate_risk
@@ -26,6 +29,9 @@ def run_analysis(dispatch: bool = True):
         + send_upcoming_due_reminders(days_ahead=3)
         + send_five_day_email_reminders()
     )
+
+    if getattr(settings, "EIMS_VOICE_AUTOCALL", False):
+        queued += send_voice_escalations()
 
     if dispatch:
         notify.dispatch_pending()

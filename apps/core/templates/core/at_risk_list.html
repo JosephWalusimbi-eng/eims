@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EIMS At-Risk Children</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h1 class="h3 mb-0">{{ title }}</h1>
+            <div class="text-muted small">
+                {{ page.paginator.count }} child{{ page.paginator.count|pluralize:"ren" }}
+                {% if district %}in <b>{{ district }}</b>{% endif %}
+                &middot; most urgent first
+                {% if not named %}&middot; <span class="badge text-bg-secondary">monitoring view: names withheld</span>{% endif %}
+            </div>
+        </div>
+        <a class="btn btn-outline-secondary" href="{% url 'dashboard' %}">&larr; Dashboard</a>
+    </div>
+
+    {% if messages %}
+    {% for message in messages %}
+    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <ul class="nav nav-pills mb-3">
+        {% for key, label in filters.items %}
+        <li class="nav-item">
+            <a class="nav-link {% if key == kind %}active{% endif %}"
+               href="?filter={{ key }}{% if district %}&amp;district={{ district|urlencode }}{% endif %}">{{ label }}</a>
+        </li>
+        {% endfor %}
+    </ul>
+
+    <div class="table-responsive">
+        <table class="table table-striped align-middle" id="at-risk-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>{% if named %}Child{% else %}Reference{% endif %}</th>
+                    {% if named %}<th>Caregiver / phone</th>{% endif %}
+                    <th>District / village</th>
+                    <th>Age</th>
+                    <th>Risk</th>
+                    <th title="Heuristic dropout score; use for ranking, not as a calibrated probability">P<sub>d</sub></th>
+                    <th>Overdue doses</th>
+                    <th>Oldest overdue</th>
+                    {% if named %}<th></th>{% endif %}
+                </tr>
+            </thead>
+            <tbody>
+            {% for c in page %}
+                <tr>
+                    <td>{{ page.start_index|add:forloop.counter0 }}</td>
+                    <td>
+                        {% if named %}
+                        <a href="{% url 'doctor_child_detail' c.unique_id %}">{{ c.full_name }}</a>
+                        {% else %}
+                        <code>{{ c.unique_id|stringformat:"s"|slice:":8" }}</code>
+                        {% endif %}
+                    </td>
+                    {% if named %}<td>{{ c.caregiver.full_name }}<br><span class="text-muted small">{{ c.caregiver.phone_number }}</span></td>{% endif %}
+                    <td>{{ c.caregiver.district|default:"Unknown" }} / {{ c.caregiver.village }}</td>
+                    <td>{{ c.date_of_birth|timesince }}</td>
+                    <td>
+                        {% if c.risk_level == "HIGH" %}<span class="badge text-bg-danger">HIGH</span>
+                        {% elif c.risk_level == "MEDIUM" %}<span class="badge text-bg-warning">MEDIUM</span>
+                        {% elif c.risk_level == "LOW" %}<span class="badge text-bg-success">LOW</span>
+                        {% else %}<span class="badge text-bg-light">unscored</span>{% endif %}
+                    </td>
+                    <td>{% if c.dropout_p is not None %}{{ c.dropout_p|floatformat:2 }}{% else %}-{% endif %}</td>
+                    <td>{{ c.overdue_doses }}</td>
+                    <td>{{ c.oldest_overdue|default:"-" }}</td>
+                    {% if named %}
+                    <td class="text-nowrap">
+                        <a class="btn btn-sm btn-outline-primary" href="{% url 'doctor_child_detail' c.unique_id %}">Open</a>
+                        <form method="post" action="{% url 'doctor_call_caregiver' c.unique_id %}" class="d-inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                            <button class="btn btn-sm btn-warning" type="submit">Call</button>
+                        </form>
+                    </td>
+                    {% endif %}
+                </tr>
+            {% empty %}
+                <tr><td colspan="10" class="text-muted">No children match.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page.has_other_pages %}
+    <nav><ul class="pagination">
+        {% if page.has_previous %}<li class="page-item"><a class="page-link" href="?filter={{ kind }}{% if district %}&amp;district={{ district|urlencode }}{% endif %}&amp;page={{ page.previous_page_number }}">Previous</a></li>{% endif %}
+        <li class="page-item disabled"><span class="page-link">Page {{ page.number }} of {{ page.paginator.num_pages }}</span></li>
+        {% if page.has_next %}<li class="page-item"><a class="page-link" href="?filter={{ kind }}{% if district %}&amp;district={{ district|urlencode }}{% endif %}&amp;page={{ page.next_page_number }}">Next</a></li>{% endif %}
+    </ul></nav>
+    {% endif %}
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

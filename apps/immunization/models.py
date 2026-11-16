@@ -198,6 +198,7 @@ class NotificationLog(models.Model):
         SMS = "SMS", "SMS"
         EMAIL = "EMAIL", "Email"
         CALENDAR = "CALENDAR", "Calendar (.ics)"
+        VOICE = "VOICE", "Automated voice call"
 
     class Status(models.TextChoices):
         QUEUED = "QUEUED", "Queued (offline or awaiting dispatch)"
@@ -210,6 +211,8 @@ class NotificationLog(models.Model):
         URGENCY = "URGENCY", "Urgency (T-3 days, SMS)"
         OVERDUE = "OVERDUE", "Overdue alert (SMS)"
         PERSISTENCE = "PERSISTENCE", "Persistence (.ics at registration)"
+        CARD_UPDATE = "CARD_UPDATE", "Card update (ticked card re-sent after a dose change)"
+        VOICE_CALL = "VOICE_CALL", "Voice call (automated assistant)"
 
     child = models.ForeignKey(
         "Child", on_delete=models.CASCADE, related_name="notifications"

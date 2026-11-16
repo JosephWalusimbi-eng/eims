@@ -53,6 +53,8 @@ def send_immunization_card_email(
     google_links: list[str],
     pdf_download_url: str,
     ics_download_url: str,
+    updated: bool = False,
+    progress: str = "",
 ) -> int:
     caregiver = child.caregiver
     recipients = [e for e in [caregiver.email, caregiver.alternate_email] if e]
@@ -67,10 +69,20 @@ def send_immunization_card_email(
             ics_download_url = urljoin(base + "/", ics_download_url.lstrip("/"))
 
     subject = f"EIMS Immunization Card - {child.full_name}"
+    if updated:
+        subject = f"EIMS Immunization Card UPDATED - {child.full_name}"
+        intro = [
+            f"The immunization card for {child.full_name} has been updated at the clinic"
+            + (f" ({progress})." if progress else "."),
+            "Doses that have been given are ticked on the attached card. "
+            "Please replace any earlier copy with this one.",
+        ]
+    else:
+        intro = [f"An immunization schedule has been created for {child.full_name}."]
     lines = [
         f"Hello {caregiver.full_name},",
         "",
-        f"An immunization schedule has been created for {child.full_name}.",
+        *intro,
         "",
         "The schedule file (.ics) uses standard calendar format. Each visit is already set to the correct due date; "
         "open or import the attachment and the events will appear on those dates in your calendar.",
@@ -121,11 +133,20 @@ def deliver_queued_email(log) -> tuple[bool, str]:
         return False, "no caregiver email on record"
 
     try:
-        if log.tier == NotificationLog.Tier.PERSISTENCE:
-            from apps.immunization.services.card_service import build_child_card_assets
+        if log.tier in (NotificationLog.Tier.PERSISTENCE, NotificationLog.Tier.CARD_UPDATE):
+            from apps.immunization.services.card_service import (
+                build_child_card_assets,
+                card_progress,
+                upsert_immunization_card,
+            )
             from apps.immunization.views import sign_artifact_link
 
+            # Rebuilt at send time, so a queued update always carries the
+            # card as it stands when it leaves, not as it stood when queued.
             pdf_bytes, ics_bytes, google_links = build_child_card_assets(log.child)
+            is_update = log.tier == NotificationLog.Tier.CARD_UPDATE
+            if is_update:
+                upsert_immunization_card(log.child, pdf_bytes)
             return (
                 bool(
                     send_immunization_card_email(
@@ -133,6 +154,8 @@ def deliver_queued_email(log) -> tuple[bool, str]:
                         google_links=google_links,
                         pdf_download_url=sign_artifact_link(log.child, "pdf"),
                         ics_download_url=sign_artifact_link(log.child, "ics"),
+                        updated=is_update,
+                        progress=card_progress(log.child) if is_update else "",
                     )
                 ),
                 "",
